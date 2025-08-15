@@ -29,9 +29,6 @@ namespace WSafe.Api.Analysis.Controllers
             return Ok(response.Value.Content[0].Text);
         }
 
-        /// <summary>
-        /// Audita documentos y sugiere mejoras según normativas.
-        /// </summary>
         [HttpPost("audit-documents")]
         public async Task<IActionResult> AuditDocuments([FromBody] object documentText)
         {
