@@ -4,6 +4,9 @@ using OpenAI.Chat;
 
 namespace WSafe.Api.Analysis.Controllers
 {
+    /// <summary>
+    /// endpoints predict-incidents, audit-documents, detect-unsafe-behaviors
+    /// </summary>
     [ApiController]
     [Route("api/[controller]")]
     public class AnalysisController : ControllerBase

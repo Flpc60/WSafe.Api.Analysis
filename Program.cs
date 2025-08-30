@@ -3,7 +3,9 @@ using OpenAI;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Habilitar Swagger con información básica
+// ----------------------
+// Swagger
+// ----------------------
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -15,35 +17,70 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Cargar clave desde variable de entorno
-var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-if (string.IsNullOrEmpty(apiKey))
+// ----------------------
+// CORS
+// ----------------------
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(p =>
+        p.AllowAnyOrigin()
+         .AllowAnyMethod()
+         .AllowAnyHeader());
+});
+
+// ----------------------
+// OpenAI API Key (ENV)
+// ----------------------
+string? rawKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+
+// Saneamos: quitamos espacios/saltos de línea accidentales
+var apiKey = rawKey?.Trim();
+
+// Validaciones útiles para evitar 401 por formato
+if (string.IsNullOrWhiteSpace(apiKey))
 {
     throw new Exception("⚠ No se encontró la variable de entorno OPENAI_API_KEY. Configúrala antes de ejecutar.");
 }
+if (!apiKey.StartsWith("sk-"))
+{
+    throw new Exception("⚠ La OPENAI_API_KEY no inicia con 'sk-'. Revisa la clave copiada.");
+}
+if (apiKey.StartsWith("sk-sk-"))
+{
+    throw new Exception("⚠ La OPENAI_API_KEY tiene doble prefijo 'sk-'. Elimina el duplicado.");
+}
 
-// Registrar cliente OpenAI
+// ----------------------
+// OpenAI Client
+// ----------------------
 var openAiClient = new OpenAIClient(apiKey);
 builder.Services.AddSingleton(openAiClient);
 
-// Controladores
+// ----------------------
+// Controllers
+// ----------------------
 builder.Services.AddControllers();
 
 var app = builder.Build();
 
-// Swagger solo en desarrollo
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// ----------------------
+// Middleware
+// ----------------------
 
-// CORS (para consumir desde tu app MVC externa)
-app.UseCors(p => p
-    .AllowAnyOrigin()
-    .AllowAnyMethod()
-    .AllowAnyHeader());
+// Habilitar Swagger SIEMPRE para facilitar pruebas (si prefieres solo en dev, cambia esta sección)
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "WSafe API Analysis v1");
+});
 
 app.UseHttpsRedirection();
+
+app.UseCors(); // usa la política por defecto registrada arriba
+
 app.MapControllers();
+
+// Health-check simple (útil para verificar despliegue y CORS)
+app.MapGet("/health", () => Results.Ok(new { status = "ok", utc = DateTime.UtcNow }));
+
 app.Run();
