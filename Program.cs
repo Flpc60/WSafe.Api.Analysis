@@ -1,86 +1,72 @@
 ﻿using Microsoft.OpenApi.Models;
-using OpenAI;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ----------------------
+// ====== 1) SERVICES ======
+
+// Controllers
+builder.Services.AddControllers();
+
+// CORS (misma política/orígenes para tu front)
+const string CorsPolicy = "WSafeCors";
+builder.Services.AddCors(o => o.AddPolicy(CorsPolicy, p =>
+{
+    p.WithOrigins(
+        "http://localhost:8080",
+        "https://localhost:44300"
+    // "https://tu-dominio"
+    )
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowCredentials();
+}));
+
 // Swagger
-// ----------------------
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "WSafe API Analysis",
+        Title = "WSafe.Api.Analysis",
         Version = "v1",
-        Description = "API para análisis de riesgos y predicciones con OpenAI"
+        Description = "Predict / Audit / Detect"
     });
 });
 
-// ----------------------
-// CORS
-// ----------------------
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(p =>
-        p.AllowAnyOrigin()
-         .AllowAnyMethod()
-         .AllowAnyHeader());
-});
-
-// ----------------------
-// OpenAI API Key (ENV)
-// ----------------------
-string? rawKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-
-// Saneamos: quitamos espacios/saltos de línea accidentales
-var apiKey = rawKey?.Trim();
-
-// Validaciones útiles para evitar 401 por formato
-if (string.IsNullOrWhiteSpace(apiKey))
-{
-    throw new Exception("⚠ No se encontró la variable de entorno OPENAI_API_KEY. Configúrala antes de ejecutar.");
-}
-if (!apiKey.StartsWith("sk-"))
-{
-    throw new Exception("⚠ La OPENAI_API_KEY no inicia con 'sk-'. Revisa la clave copiada.");
-}
-if (apiKey.StartsWith("sk-sk-"))
-{
-    throw new Exception("⚠ La OPENAI_API_KEY tiene doble prefijo 'sk-'. Elimina el duplicado.");
-}
-
-// ----------------------
-// OpenAI Client
-// ----------------------
-var openAiClient = new OpenAIClient(apiKey);
-builder.Services.AddSingleton(openAiClient);
-
-// ----------------------
-// Controllers
-// ----------------------
-builder.Services.AddControllers();
-
 var app = builder.Build();
 
-// ----------------------
-// Middleware
-// ----------------------
+// ====== 2) MIDDLEWARE PIPELINE ======
 
-// Habilitar Swagger SIEMPRE para facilitar pruebas (si prefieres solo en dev, cambia esta sección)
+// Swagger
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "WSafe API Analysis v1");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "WSafe.Api.Analysis v1");
 });
 
+// CORS
+app.UseCors(CorsPolicy);
+
+// HTTPS redirection (comenta para pruebas HTTP con curl si lo necesitas)
 app.UseHttpsRedirection();
 
-app.UseCors(); // usa la política por defecto registrada arriba
+app.UseAuthorization();
+
+// Preflight OPTIONS
+app.MapMethods("{*path}", new[] { "OPTIONS" }, (HttpContext ctx) =>
+{
+    var origin = ctx.Request.Headers["Origin"].ToString();
+    if (!string.IsNullOrEmpty(origin))
+    {
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = origin;
+        ctx.Response.Headers["Vary"] = "Origin";
+    }
+    ctx.Response.Headers["Access-Control-Allow-Credentials"] = "true";
+    ctx.Response.Headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization";
+    ctx.Response.Headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,PATCH,DELETE,OPTIONS";
+    return Results.Ok();
+});
 
 app.MapControllers();
-
-// Health-check simple (útil para verificar despliegue y CORS)
-app.MapGet("/health", () => Results.Ok(new { status = "ok", utc = DateTime.UtcNow }));
 
 app.Run();
